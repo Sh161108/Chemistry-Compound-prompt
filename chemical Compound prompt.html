@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Random Compound Viewer</title>
+  <style>
+    :root{
+      --page-bg: #06070a;
+      --panel-bg: #0f1720;
+      --muted: #9aa4b2;
+      --text: #e6eef6;
+      --accent: #4da3ff;
+      --card-elev: rgba(6,10,15,0.7);
+      --btn-bg: #0b2438;
+      --btn-border: rgba(255,255,255,0.06);
+      --success: #7ee3a8;
+    }
+
+    /* Reset & layout */
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;
+      background:linear-gradient(180deg,var(--page-bg),#03101a 60%);
+      color:var(--text);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      min-height:100vh;
+      padding:28px;
+    }
+
+    .container{
+      width:100%;
+      max-width:880px;
+      background:linear-gradient(180deg,var(--panel-bg),#071019);
+      border-radius:12px;
+      box-shadow:0 10px 40px var(--card-elev);
+      padding:22px;
+      border:1px solid rgba(255,255,255,0.03);
+    }
+
+    h1{
+      margin:0 0 10px 0;
+      font-size:20px;
+      font-weight:600;
+      color:var(--text);
+    }
+
+    .toolbar{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-bottom:14px;
+    }
+
+    button{
+      padding:9px 14px;
+      border-radius:9px;
+      border:1px solid var(--btn-border);
+      background:transparent;
+      color:var(--text);
+      cursor:pointer;
+      font-size:14px;
+      transition:transform .06s ease, box-shadow .06s ease;
+      backdrop-filter: blur(6px);
+    }
+    button:active{ transform:translateY(1px) }
+    button.primary{
+      background:linear-gradient(180deg,var(--accent),#2f88ff 70%);
+      color:#021826;
+      border-color:transparent;
+      box-shadow:0 6px 18px rgba(77,163,255,0.14);
+    }
+
+    .info{ color:var(--muted); font-size:14px; margin-bottom:12px; }
+
+    .card{
+      display:flex;
+      gap:18px;
+      align-items:center;
+      padding:18px;
+      border-radius:12px;
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border:1px solid rgba(255,255,255,0.03);
+    }
+
+    .mol-area{
+      width:220px;
+      height:220px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius:10px;
+      box-shadow: inset 0 2px 10px rgba(0,0,0,0.6);
+      overflow:hidden;
+      border:1px solid rgba(255,255,255,0.02);
+    }
+
+    .mol-area img{
+      max-width:100%;
+      max-height:100%;
+      display:block;
+      filter: drop-shadow(0 6px 18px rgba(0,0,0,0.6));
+      background:transparent;
+    }
+
+    .mol-meta{ flex:1; min-width:0; }
+    .mol-name{ font-weight:700; font-size:18px; margin:0 0 6px 0; color:var(--text); }
+    .mol-msg{ color:var(--muted); font-size:14px; margin:0 0 8px 0; }
+
+    .hidden{ display:none; }
+
+    a.fallback{
+      color:var(--accent);
+      text-decoration:none;
+      font-weight:600;
+      display:inline-block;
+      margin-top:8px;
+      font-size:14px;
+    }
+
+    .small{ font-size:13px; color:var(--muted); }
+
+    /* Responsive */
+    @media (max-width:640px){
+      .card{ flex-direction:column; align-items:flex-start; gap:12px; }
+      .mol-area{ width:160px; height:160px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container" role="main">
+    <h1>Random compound — draw on prompt</h1>
+
+    <div class="toolbar">
+      <button id="drawBtn" class="primary">Pick & Prompt</button>
+      <button id="showBtn">Show last</button>
+      <button id="againBtn">Pick another (no prompt)</button>
+      <button id="clearBtn">Clear</button>
+    </div>
+
+    <div class="info">Click <strong>Pick & Prompt</strong> — a prompt will ask "Draw: &lt;compound&gt;". Type <strong>yes</strong> (case-insensitive) to display the structure image retrieved from PubChem.</div>
+
+    <div id="card" class="card hidden" aria-live="polite">
+      <div class="mol-area" aria-hidden="false">
+        <img id="molImg" alt="" />
+      </div>
+      <div class="mol-meta">
+        <div id="molName" class="mol-name"></div>
+        <div id="molMsg" class="mol-msg">Loading image…</div>
+        <div id="fallback" class="hidden">
+          <div class="small">If the image failed to load, try searching PubChem for this name:</div>
+          <a id="pubchemLink" class="fallback" target="_blank" rel="noopener">Open PubChem</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const compounds = [
+      'benzene','naphthalene','anthracene','phenanthracene','cumene','azulene','furane','pyran',
+      'pyrrole','tetrahydrofurane','thiophene','quinone','benzene sulfonic acid','phenol','toluene',
+      'aniline','ortho cresol','meta cresol','para cresol','styrene','xylene','mesitylene','catechol',
+      'resorcinol','hydroquinone','anisole','ortho toluidine','meta toluidine','para toluidine','acetophenone',
+      'benzophenone','salicyclic acid','phthalic acid','terephthalic acid','paracetamol','asprin',
+      'allene','isoprene','glycerol','sorbitol','pinacol','phloroglucinol','vinyl acetylene',
+      'crotonylene','allylene','chloroprene','gammexane','lindane','benzene hexachloride','oxitrane',
+      'oxirane','mercaptal','mercaptan','mercaptide','phthalic anhydride','benzoic anhydride','coumarine',
+      'per benzoic acid','stilbene','glyoxal','ketene','methyl glyoxal','benzaldehyde','cinnamaldehyde',
+      'acetone','phorone','tropone','Benzil','caproic acid','acrylic acid'
+      'isopentane','isooctane','allene','westron','westrosol','glycol','glycerol','allyl alcohol',
+      'vinyl alcohol','anisole','acetone','malic acid','glycolic acid','malonic acid','succinic acid'
+    ];
+
+    const drawBtn = document.getElementById('drawBtn');
+    const showBtn = document.getElementById('showBtn');
+    const againBtn = document.getElementById('againBtn');
+    const clearBtn = document.getElementById('clearBtn');
+
+    const card = document.getElementById('card');
+    const molImg = document.getElementById('molImg');
+    const molName = document.getElementById('molName');
+    const molMsg = document.getElementById('molMsg');
+    const fallback = document.getElementById('fallback');
+    const pubchemLink = document.getElementById('pubchemLink');
+
+    let lastCompound = null;
+
+    function pickRandomCompound() {
+      const i = Math.floor(Math.random() * compounds.length);
+      return compounds[i];
+    }
+
+    function pubchemImageUrl(name){
+      return `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(name)}/PNG?image_size=400x400`;
+    }
+    function pubchemSearchUrl(name){
+      return `https://pubchem.ncbi.nlm.nih.gov/#query=${encodeURIComponent(name)}`;
+    }
+
+    function showCompound(name){
+      lastCompound = name;
+      molName.textContent = name;
+      molMsg.textContent = 'Loading image…';
+      fallback.classList.add('hidden');
+      card.classList.remove('hidden');
+
+      const src = pubchemImageUrl(name);
+      molImg.src = src;
+      molImg.alt = `Structure of ${name}`;
+
+      molImg.onload = () => {
+        molMsg.textContent = 'Structure loaded from PubChem.';
+        pubchemLink.href = pubchemSearchUrl(name);
+      };
+
+      molImg.onerror = () => {
+        molMsg.textContent = 'Could not load a structure image for this name. Try the PubChem search link.';
+        fallback.classList.remove('hidden');
+        pubchemLink.href = pubchemSearchUrl(name);
+        molImg.src = '';
+        molImg.alt = 'No image available';
+      };
+    }
+
+    drawBtn.addEventListener('click', () => {
+      const compound = pickRandomCompound();
+      const answer = prompt('Draw: ' + compound);
+      if (answer && answer.trim().toLowerCase() === 'yes') {
+        showCompound(compound);
+      } else {
+        alert('You did not type "yes". No image will be shown.');
+      }
+    });
+
+    showBtn.addEventListener('click', () => {
+      if (lastCompound) {
+        showCompound(lastCompound);
+      } else {
+        alert('No compound shown yet. Click "Pick & Prompt" first.');
+      }
+    });
+
+    againBtn.addEventListener('click', () => {
+      const compound = pickRandomCompound();
+      showCompound(compound);
+    });
+
+    clearBtn.addEventListener('click', () => {
+      card.classList.add('hidden');
+      molImg.src = '';
+      lastCompound = null;
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'd' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        drawBtn.click();
+      }
+    });
+  </script>
+</body>
+</html>
